@@ -94,6 +94,18 @@ export class Bytecode
 				case OpCode.NOT:
 					str += `NOT\n`;
 					break;
+				case OpCode.INC:
+					str += `INC\n`;
+					break;
+				case OpCode.DEC:
+					str += `DEC\n`;
+					break;
+				case OpCode.INC_LATER:
+					str += `INC_LATER\n`;
+					break;
+				case OpCode.DEC_LATER:
+					str += `DEC_LATER\n`;
+					break;
 				case OpCode.TYPEOF:
 					str += `TYPEOF\n`;
 					break;
@@ -102,6 +114,9 @@ export class Bytecode
 					break;
 				case OpCode.DELETE:
 					str += `DELETE\n`;
+					break;
+				case OpCode.SPREAD:
+					str += `SPREAD\n`;
 					break;
 				case OpCode.IN:
 					str += `IN\n`;

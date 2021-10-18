@@ -124,6 +124,17 @@ Deno.test
 			`typeof a`,
 			`a=[]; typeof a.b`,
 			`typeof('')`,
+			`a=3; ++a * 2`,
+			`a=3; ++a * 2; a`,
+			`a=3; 5 + ++a * 2`,
+			`a=3; 5 + ++a * 2; a`,
+			`a=3; a++ * 2`,
+			`a=3; a++ * 2; a`,
+			`a=3; 5 + a++ * 2`,
+			`a=3; 5 + a++ * 2; a`,
+			`a={k2: "v2"}; b={k1: "v1", ...a, k3: "v3"}`,
+			`a={k2: "v2", k3: "v3"}; ["k1", ...Object.keys(a), "k4"]`,
+			`a=[2.1, 3.4, -5]; Math.max(...a)`,
 		];
 
 		// deno-lint-ignore no-unused-vars

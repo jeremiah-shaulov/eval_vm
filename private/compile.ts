@@ -45,9 +45,14 @@ export const enum OpCode
 	NEG,
 	INV,
 	NOT,
+	INC,
+	DEC,
+	INC_LATER,
+	DEC_LATER,
 	TYPEOF,
 	VOID,
 	DELETE,
+	SPREAD,
 	IN,
 	INSTANCEOF,
 	ADD,
@@ -106,9 +111,14 @@ const PRECEDENCE =
 	18, // NEG
 	18, // INV
 	18, // NOT
+	18, // INC
+	18, // DEC
+	18, // INC_LATER
+	18, // DEC_LATER
 	18, // TYPEOF
 	18, // VOID,
 	18, // DELETE,
+	18, // SPREAD
 	13, // IN
 	13, // INSTANCEOF
 	15, // PLUS
@@ -291,77 +301,104 @@ export function compile(bytecode: Bytecode, it: Generator<Token>, exprType=ExprT
 					}
 					break;
 				case TokenType.OTHER:
-					if (token.text.length != 1)
-					{	throw new SyntaxError('Unexpected token', token.nLine, token.nColumn);
-					}
-					switch (token.text.charCodeAt(0))
-					{	case C_PLUS:
-							pendingUnaryOps[pendingUnaryOps.length] = OpCode.UNARY_PLUS;
-							continue;
-						case C_MINUS:
-							pendingUnaryOps[pendingUnaryOps.length] = OpCode.NEG;
-							continue;
-						case C_TILDA:
-							pendingUnaryOps[pendingUnaryOps.length] = OpCode.INV;
-							continue;
-						case C_EXCL:
-							pendingUnaryOps[pendingUnaryOps.length] = OpCode.NOT;
-							continue;
-						case C_PAREN_OPEN:
-							if (compile(bytecode, it, ExprType.SECONDARY).exitType != ExitType.PAREN_CLOSE)
-							{	throw new SyntaxError('Unbalanced parentheses', token.nLine, token.nColumn);
+					switch (token.text.length)
+					{	case 1:
+							switch (token.text.charCodeAt(0))
+							{	case C_PLUS:
+									pendingUnaryOps[pendingUnaryOps.length] = OpCode.UNARY_PLUS;
+									continue;
+								case C_MINUS:
+									pendingUnaryOps[pendingUnaryOps.length] = OpCode.NEG;
+									continue;
+								case C_TILDA:
+									pendingUnaryOps[pendingUnaryOps.length] = OpCode.INV;
+									continue;
+								case C_EXCL:
+									pendingUnaryOps[pendingUnaryOps.length] = OpCode.NOT;
+									continue;
+								case C_PAREN_OPEN:
+									if (compile(bytecode, it, ExprType.SECONDARY).exitType != ExitType.PAREN_CLOSE)
+									{	throw new SyntaxError('Unbalanced parentheses', token.nLine, token.nColumn);
+									}
+									break;
+								case C_PAREN_CLOSE:
+									// func call with 0 arguments
+									if (exprType!=ExprType.FUNC_ARGS || !isStmtStart || pendingUnaryOps.length!=0)
+									{	throw new SyntaxError('Unexpected parenthesis close', token.nLine, token.nColumn);
+									}
+									return {redoToken: token, exitType: ExitType.PAREN_CLOSE, nArgs: 0};
+								case C_SQUARE_OPEN:
+								{	const {exitType, nArgs} = compile(bytecode, it, ExprType.ARRAY);
+									if (exitType != ExitType.SQUARE_CLOSE)
+									{	throw new SyntaxError('Unbalanced square bracket', token.nLine, token.nColumn);
+									}
+									bytecode.add(OpCode.ARRAY, nArgs);
+									break;
+								}
+								case C_SQUARE_CLOSE:
+									// empty array: []
+									if (exprType!=ExprType.ARRAY || !isStmtStart || pendingUnaryOps.length!=0)
+									{	throw new SyntaxError('Unexpected square bracket close', token.nLine, token.nColumn);
+									}
+									return {redoToken: token, exitType: ExitType.SQUARE_CLOSE, nArgs: 0};
+								case C_BRACE_OPEN:
+								{	if (isStmtStart && (exprType==ExprType.PRIMARY || exprType==ExprType.PRIMARY_ONE_STMT))
+									{	// deno-lint-ignore no-inner-declarations no-redeclare
+										var {redoToken, exitType} = compile(bytecode, it, ExprType.PRIMARY);
+										if (exitType != ExitType.BRACE_CLOSE)
+										{	throw new SyntaxError('Unbalanced braces', token.nLine, token.nColumn);
+										}
+										if (exprType == ExprType.PRIMARY_ONE_STMT)
+										{	return {redoToken, exitType, nArgs};
+										}
+										redoToken = undefined;
+									}
+									else
+									{	const nArgs = compileObject(bytecode, it);
+										bytecode.add(OpCode.OBJECT, nArgs);
+									}
+									break;
+								}
+								case C_BRACE_CLOSE:
+									// "}" that terminates object
+									if (exprType!=ExprType.OBJECT || pendingOp!=OpCode.VALUE || pendingUnaryOps.length!=0)
+									{	throw new SyntaxError('Unexpected brace close', token.nLine, token.nColumn);
+									}
+									return {redoToken: token, exitType: ExitType.BRACE_CLOSE, nArgs: 1};
+								case C_SEMICOLON:
+									// double semicolon
+									if (!isStmtStart || pendingUnaryOps.length!=0 || exprType!=ExprType.PRIMARY)
+									{	throw new SyntaxError('Unexpected semicolon', token.nLine, token.nColumn);
+									}
+									continue;
+								default:
+									throw new SyntaxError('Unexpected token', token.nLine, token.nColumn);
 							}
 							break;
-						case C_PAREN_CLOSE:
-							// func call with 0 arguments
-							if (exprType!=ExprType.FUNC_ARGS || !isStmtStart || pendingUnaryOps.length!=0)
-							{	throw new SyntaxError('Unexpected parenthesis close', token.nLine, token.nColumn);
+						case 2:
+							switch (token.text.charCodeAt(0)*256 + token.text.charCodeAt(1))
+							{	case C_PLUS*256 + C_PLUS:
+									pendingUnaryOps[pendingUnaryOps.length] = OpCode.INC;
+									continue;
+								case C_MINUS*256 + C_MINUS:
+									pendingUnaryOps[pendingUnaryOps.length] = OpCode.DEC;
+									continue;
+								default:
+									throw new SyntaxError('Unexpected token', token.nLine, token.nColumn);
 							}
-							return {redoToken: token, exitType: ExitType.PAREN_CLOSE, nArgs: 0};
-						case C_SQUARE_OPEN:
-						{	const {exitType, nArgs} = compile(bytecode, it, ExprType.ARRAY);
-							if (exitType != ExitType.SQUARE_CLOSE)
-							{	throw new SyntaxError('Unbalanced square bracket', token.nLine, token.nColumn);
-							}
-							bytecode.add(OpCode.ARRAY, nArgs);
 							break;
-						}
-						case C_SQUARE_CLOSE:
-							// empty array: []
-							if (exprType!=ExprType.ARRAY || !isStmtStart || pendingUnaryOps.length!=0)
-							{	throw new SyntaxError('Unexpected square bracket close', token.nLine, token.nColumn);
-							}
-							return {redoToken: token, exitType: ExitType.SQUARE_CLOSE, nArgs: 0};
-						case C_BRACE_OPEN:
-						{	if (isStmtStart && (exprType==ExprType.PRIMARY || exprType==ExprType.PRIMARY_ONE_STMT))
-							{	// deno-lint-ignore no-inner-declarations no-redeclare
-								var {redoToken, exitType} = compile(bytecode, it, ExprType.PRIMARY);
-								if (exitType != ExitType.BRACE_CLOSE)
-								{	throw new SyntaxError('Unbalanced braces', token.nLine, token.nColumn);
+						case 3:
+							if (token.text == '...')
+							{	if (pendingOp!=OpCode.VALUE || pendingUnaryOps.length!=0 || (exprType!=ExprType.FUNC_ARGS && exprType!=ExprType.ARRAY))
+								{	throw new SyntaxError('Misplaced spread operator', token.nLine, token.nColumn);
 								}
-								if (exprType == ExprType.PRIMARY_ONE_STMT)
-								{	return {redoToken, exitType, nArgs};
-								}
-								redoToken = undefined;
+								pendingUnaryOps[pendingUnaryOps.length] = OpCode.SPREAD;
+								continue;
 							}
 							else
-							{	const nArgs = compileObject(bytecode, it);
-								bytecode.add(OpCode.OBJECT, nArgs);
+							{	throw new SyntaxError('Unexpected token', token.nLine, token.nColumn);
 							}
 							break;
-						}
-						case C_BRACE_CLOSE:
-							// "}" that terminates object
-							if (exprType!=ExprType.OBJECT || pendingOp!=OpCode.VALUE || pendingUnaryOps.length!=0)
-							{	throw new SyntaxError('Unexpected brace close', token.nLine, token.nColumn);
-							}
-							return {redoToken: token, exitType: ExitType.BRACE_CLOSE, nArgs: 1};
-						case C_SEMICOLON:
-							// double semicolon
-							if (!isStmtStart || pendingUnaryOps.length!=0 || exprType!=ExprType.PRIMARY)
-							{	throw new SyntaxError('Unexpected semicolon', token.nLine, token.nColumn);
-							}
-							continue;
 						default:
 							throw new SyntaxError('Unexpected token', token.nLine, token.nColumn);
 					}
@@ -684,6 +721,16 @@ export function compile(bytecode: Bytecode, it: Generator<Token>, exprType=ExprT
 									opCodeValue = 0;
 									expecting = Expecting.VALUE;
 									continue;
+								case C_PLUS*256 + C_PLUS:
+									pendingOp = OpCode.INC_LATER;
+									opCodeValue = 0;
+									expecting = Expecting.VALUE;
+									break;
+								case C_MINUS*256 + C_MINUS:
+									pendingOp = OpCode.DEC_LATER;
+									opCodeValue = 0;
+									expecting = Expecting.VALUE;
+									break;
 								case C_AMP*256 + C_AMP:
 								{	// IF
 									bytecode.add(OpCode.IF, 0);
@@ -949,6 +996,18 @@ function compileObject(bytecode: Bytecode, it: Generator<Token>)
 								throw new SyntaxError('Unexpected token', token.nLine, token.nColumn);
 						}
 					}
+					else if (token.text == '...')
+					{	const {exitType} = compile(bytecode, it, ExprType.OBJECT);
+						bytecode.add(OpCode.SPREAD, 0);
+						nArgs++;
+						if (exitType == ExitType.BRACE_CLOSE)
+						{	return nArgs;
+						}
+						if (exitType != ExitType.COMMA)
+						{	throw new SyntaxError('Unbalanced brace', token.nLine, token.nColumn);
+						}
+						continue;
+					}
 					else
 					{	throw new SyntaxError('Unexpected token', token.nLine, token.nColumn);
 					}
@@ -973,6 +1032,7 @@ function compileObject(bytecode: Bytecode, it: Generator<Token>)
 					throw new SyntaxError('Expected ":"', token.nLine, token.nColumn);
 			}
 			const {exitType} = compile(bytecode, it, ExprType.OBJECT);
+			nArgs++;
 			if (exitType == ExitType.BRACE_CLOSE)
 			{	return nArgs;
 			}

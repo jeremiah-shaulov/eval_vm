@@ -60,6 +60,12 @@ class Name
 	}
 }
 
+class Spread
+{	constructor(public value: Any)
+	{
+	}
+}
+
 export function safeEval(expr: string|Bytecode, globalThis: unknown={}, handler: Handler={})
 {	const bytecode = expr instanceof Bytecode ? expr : new Bytecode(expr);
 	return executeBytecode(bytecode, globalThis, handler);
@@ -130,7 +136,15 @@ async function executeBytecode(bytecode: Bytecode, globalThis: unknown, handler:
 				{	const nArgs = values[i]|0;
 					const args: unknown[] = [];
 					for (let i=stackLen-nArgs; i<stackLen; i++)
-					{	args.push(valueOf(stack[i]));
+					{	const value = valueOf(stack[i]);
+						if (value instanceof Spread)
+						{	for (const v of value.value)
+							{	args[args.length] = v;
+							}
+						}
+						else
+						{	args[args.length] = value;
+						}
 					}
 					stackLen -= nArgs;
 					const func = stack[stackLen-1];
@@ -163,19 +177,34 @@ async function executeBytecode(bytecode: Bytecode, globalThis: unknown, handler:
 				{	const nArgs = values[i]|0;
 					const args: unknown[] = [];
 					for (let i=stackLen-nArgs; i<stackLen; i++)
-					{	args.push(valueOf(stack[i]));
+					{	const value = valueOf(stack[i]);
+						if (value instanceof Spread)
+						{	for (const v of value.value)
+							{	args[args.length] = v;
+							}
+						}
+						else
+						{	args[args.length] = value;
+						}
 					}
 					stackLen -= nArgs;
 					stack[stackLen++] = args;
 					break;
 				}
 				case OpCode.OBJECT:
-				{	const nArgs = values[i] << 1;
+				{	const nArgs = values[i]|0;
 					const obj: Record<string, unknown> = {};
-					for (let i=stackLen-nArgs; i<stackLen; i++)
+					for (let i=stackLen-nArgs; i<stackLen;)
 					{	const name = valueOf(stack[i++]);
-						const value = valueOf(stack[i]);
-						obj[name] = value;
+						if (name instanceof Spread)
+						{	for (const [k, v] of Object.entries(name.value))
+							{	obj[k] = v;
+							}
+						}
+						else
+						{	const value = valueOf(stack[i++]);
+							obj[name] = value;
+						}
 					}
 					stackLen -= nArgs;
 					stack[stackLen++] = obj;
@@ -188,12 +217,12 @@ async function executeBytecode(bytecode: Bytecode, globalThis: unknown, handler:
 					const args: unknown[] = [strings];
 					strings.raw = raw;
 					for (let i=stackLen-nArgs; true; i++)
-					{	strings.push(stack[i++] + '');
-						raw.push(stack[i++] + '');
+					{	strings[strings.length] = stack[i++] + '';
+						raw[raw.length] = stack[i++] + '';
 						if (i >= stackLen)
 						{	break;
 						}
-						args.push(valueOf(stack[i]));
+						args[args.length] = valueOf(stack[i]);
 					}
 					stackLen -= nArgs;
 					const func = stack[stackLen-1];
@@ -248,6 +277,42 @@ async function executeBytecode(bytecode: Bytecode, globalThis: unknown, handler:
 				case OpCode.NOT:
 					stack[stackLen-1] = !valueOf(stack[stackLen-1]);
 					break;
+				case OpCode.INC:
+				{	const a = stack[stackLen-1];
+					if (!(a instanceof Name))
+					{	throw new Error('Invalid operand to ++');
+					}
+					stack[stackLen-1] = a.set(a.get(globalThis, handler) + 1, globalThis, handler);
+					break;
+				}
+				case OpCode.DEC:
+				{	const a = stack[stackLen-1];
+					if (!(a instanceof Name))
+					{	throw new Error('Invalid operand to --');
+					}
+					stack[stackLen-1] = a.set(a.get(globalThis, handler) - 1, globalThis, handler);
+					break;
+				}
+				case OpCode.INC_LATER:
+				{	const a = stack[stackLen-1];
+					if (!(a instanceof Name))
+					{	throw new Error('Invalid operand to ++');
+					}
+					const value = a.get(globalThis, handler);
+					a.set(value + 1, globalThis, handler);
+					stack[stackLen-1] = value;
+					break;
+				}
+				case OpCode.DEC_LATER:
+				{	const a = stack[stackLen-1];
+					if (!(a instanceof Name))
+					{	throw new Error('Invalid operand to ++');
+					}
+					const value = a.get(globalThis, handler);
+					a.set(value - 1, globalThis, handler);
+					stack[stackLen-1] = value;
+					break;
+				}
 				case OpCode.TYPEOF:
 					stack[stackLen-1] = typeof(valueOf(stack[stackLen-1]));
 					break;
@@ -264,6 +329,9 @@ async function executeBytecode(bytecode: Bytecode, globalThis: unknown, handler:
 					stack[stackLen-1] = result;
 					break;
 				}
+				case OpCode.SPREAD:
+					stack[stackLen-1] = new Spread(valueOf(stack[stackLen-1]));
+					break;
 				case OpCode.IN:
 				{	const b = stack[--stackLen];
 					stack[stackLen-1] = valueOf(stack[stackLen-1]) in valueOf(b);

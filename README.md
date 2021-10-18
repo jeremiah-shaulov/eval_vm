@@ -10,7 +10,7 @@ During code execution, `globalThis` object is substituted with one that you prov
 ### Example:
 
 ```ts
-import {safeEval} from "https://deno.land/x/eval_vm@v0.0.1/mod.ts";
+import {safeEval} from "https://deno.land/x/eval_vm@v0.0.2/mod.ts";
 
 // 1. Prepare fake "globalThis" object
 const globalThis: any = {Object, String, Number, Math, JSON};
@@ -51,12 +51,13 @@ console.log(globalThis.a); // prints {allowed: true}
 
 Currently only the following JavaScript things are implemented:
 
-- Values: strings, numbers, names, etc.
-- Operations: almost all, except `++`, `--`, `...` and `new`.
+- Values: numbers, strings, names, etc.
+- Operations: `.` `?.` `+` `-` `*` `/` `%` `**` `!` `~` `++` `--` `<<` `>>` `>>>` `&` `|` `^` `&&` `||` `??` `<` `<=` `==` `===` `!=` `!==` `>=` `>` `=` `+=` `-=` `*=` `/=` `%=` `**=` `<<=` `>>=` `>>>=` `&=` `|=` `^=` `&&=` `||=` `??=` `,` `...` `typeof` `void` `delete` `in` `instanceof`
 - `if - else`
 
 Not implemented:
 - `var`, `let`, `const` (only global variables in the provided `globalThis` can be used)
+- `new`
 - Loops
 - Block labels
 - Lambdas
