@@ -24,19 +24,6 @@ class Name
 		}
 	}
 
-	apply(args: Any[], globalThis: unknown, handler: Handler)
-	{	const func = this.get(globalThis, handler);
-		if (func == null)
-		{	throw new Error(`Object doesn't have nonnull property "${this.name}"`);
-		}
-		if (handler.apply)
-		{	return handler.apply(func, this.boundThis, args);
-		}
-		else
-		{	return func.apply(this.boundThis, args);
-		}
-	}
-
 	set(value: Any, globalThis: unknown, handler: Handler)
 	{	if (this.boundThis == null)
 		{	throw new Error(`Tried to call "${this.name}" on null`);
@@ -56,6 +43,32 @@ class Name
 		}
 		else
 		{	return delete this.boundThis[this.name];
+		}
+	}
+
+	apply(args: Any[], globalThis: unknown, handler: Handler)
+	{	const func = this.get(globalThis, handler);
+		if (func == null)
+		{	throw new Error(`Object doesn't have nonnull property "${this.name}"`);
+		}
+		if (handler.apply)
+		{	return handler.apply(func, this.boundThis, args);
+		}
+		else
+		{	return func.apply(this.boundThis, args);
+		}
+	}
+
+	construct(args: Any[], globalThis: unknown, handler: Handler)
+	{	const ctor: Any = this.get(globalThis, handler);
+		if (ctor == null)
+		{	throw new Error(`Object doesn't have nonnull property "${this.name}"`);
+		}
+		if (handler.construct)
+		{	return handler.construct(ctor, args, globalThis as Any);
+		}
+		else
+		{	return new ctor(...args);
 		}
 	}
 }
@@ -184,12 +197,11 @@ async function executeBytecode(bytecode: Bytecode, globalThis: unknown, handler:
 						}
 					}
 					stackLen -= nArgs;
-					const className = stack[stackLen-1];
-					if (!(className instanceof Name))
-					{	throw new Error('Cannot instanciate such value');
+					const a = stack[stackLen-1];
+					if (!(a instanceof Name))
+					{	throw new Error('Cannot instantiate such value');
 					}
-					const c: Any = className.get(globalThis, handler);
-					stack[stackLen-1] = new c(...args);
+					stack[stackLen-1] = a.construct(args, globalThis, handler);
 					break;
 				}
 				case OpCode.DISCARD:

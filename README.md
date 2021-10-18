@@ -10,7 +10,7 @@ During code execution, `globalThis` object is substituted with one that you prov
 ### Example:
 
 ```ts
-import {safeEval} from "https://deno.land/x/eval_vm@v0.0.3/mod.ts";
+import {safeEval} from "https://deno.land/x/eval_vm@v0.0.4/mod.ts";
 
 // 1. Prepare fake "globalThis" object
 const globalThis: any = {Object, String, Number, Math, JSON};
@@ -71,4 +71,5 @@ Third argument to `safeEval()` is called `handler`, and it can contain the follo
 - `get(target: object, prop: string, globalThis: any): any` - catches property read access
 - `set(target: object, prop: string, value: any, globalThis: any): boolean` - catches property write access
 - `deleteProperty(target: object, prop: string): boolean` - catches property deletion
-- `apply(target: object, thisArg: any, argArray: any[]): any` - catches method call
+- `apply(func: Function, thisArg: any, argArray: any[]): any` - catches method call
+- `construct(ctor: Function, argArray: any[], globalThis: any): object` - catches class instantiation
