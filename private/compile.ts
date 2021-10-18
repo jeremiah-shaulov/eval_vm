@@ -936,27 +936,38 @@ export function compile(bytecode: Bytecode, it: Generator<Token>, exprType=ExprT
 						pos++;
 					}
 					let k = j + shiftBlockLen;
-					const kEnd = k + shiftBlockLen;
-					for (; k<pos; j++, k++)
-					{	// swap opCodes
-						const tmp = opCodes[j];
-						opCodes[j] = opCodes[k];
-						opCodes[k] = tmp;
-						// swap values
-						const tmp2 = values[j];
-						values[j] = values[k];
-						values[k] = tmp2;
-					}
-					if (kEnd > pos)
-					{	while (++j < pos)
+					if (k < pos)
+					{	const kEnd = k + shiftBlockLen;
+						/*	I want to perform:
+
+							const opCodesSlice = opCodes.splice(j, shiftBlockLen);
+							const valuesSlice = values.splice(j, shiftBlockLen);
+							opCodes.splice(opCodes.length, 0, ...opCodesSlice);
+							values.splice(values.length, 0, ...valuesSlice);
+
+							The following is optimized version of this
+						 */
+						for (; k<pos; j++, k++)
 						{	// swap opCodes
-							const tmp = opCodes[j-1];
-							opCodes[j-1] = opCodes[j];
-							opCodes[j] = tmp;
+							const tmp = opCodes[j];
+							opCodes[j] = opCodes[k];
+							opCodes[k] = tmp;
 							// swap values
-							const tmp2 = values[j-1];
-							values[j-1] = values[j];
-							values[j] = tmp2;
+							const tmp2 = values[j];
+							values[j] = values[k];
+							values[k] = tmp2;
+						}
+						if (kEnd > pos)
+						{	while (++j < pos)
+							{	// swap opCodes
+								const tmp = opCodes[j-1];
+								opCodes[j-1] = opCodes[j];
+								opCodes[j] = tmp;
+								// swap values
+								const tmp2 = values[j-1];
+								values[j-1] = values[j];
+								values[j] = tmp2;
+							}
 						}
 					}
 				}

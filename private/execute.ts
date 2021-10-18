@@ -4,15 +4,12 @@ import {Bytecode} from "./bytecode.ts";
 // deno-lint-ignore no-explicit-any
 type Any = any;
 
-// deno-lint-ignore ban-types
-type Handler = ProxyHandler<object>;
-
 class Name
 {	constructor(public name: string, public boundThis: Any)
 	{
 	}
 
-	get(globalThis: unknown, handler: Handler)
+	get(globalThis: unknown, handler: ProxyHandler<Any>)
 	{	if (this.boundThis == null)
 		{	throw new Error(`Tried to access "${this.name}" on null`);
 		}
@@ -24,7 +21,7 @@ class Name
 		}
 	}
 
-	set(value: Any, globalThis: unknown, handler: Handler)
+	set(value: Any, globalThis: unknown, handler: ProxyHandler<Any>)
 	{	if (this.boundThis == null)
 		{	throw new Error(`Tried to call "${this.name}" on null`);
 		}
@@ -37,7 +34,7 @@ class Name
 		return value;
 	}
 
-	deleteProperty(handler: Handler)
+	deleteProperty(handler: ProxyHandler<Any>)
 	{	if (handler.deleteProperty)
 		{	return !!handler.deleteProperty(this.boundThis, this.name);
 		}
@@ -46,7 +43,7 @@ class Name
 		}
 	}
 
-	apply(args: Any[], globalThis: unknown, handler: Handler)
+	apply(args: Any[], globalThis: unknown, handler: ProxyHandler<Any>)
 	{	const func = this.get(globalThis, handler);
 		if (func == null)
 		{	throw new Error(`Object doesn't have nonnull property "${this.name}"`);
@@ -59,7 +56,7 @@ class Name
 		}
 	}
 
-	construct(args: Any[], globalThis: unknown, handler: Handler)
+	construct(args: Any[], globalThis: unknown, handler: ProxyHandler<Any>)
 	{	const ctor: Any = this.get(globalThis, handler);
 		if (ctor == null)
 		{	throw new Error(`Object doesn't have nonnull property "${this.name}"`);
@@ -79,12 +76,12 @@ class Spread
 	}
 }
 
-export function safeEval(expr: string|Bytecode, globalThis: unknown={}, handler: Handler={})
+export function safeEval(expr: string|Bytecode, globalThis: unknown={}, handler: ProxyHandler<Any>={})
 {	const bytecode = expr instanceof Bytecode ? expr : new Bytecode(expr);
 	return executeBytecode(bytecode, globalThis, handler);
 }
 
-async function executeBytecode(bytecode: Bytecode, globalThis: unknown, handler: Handler)
+async function executeBytecode(bytecode: Bytecode, globalThis: unknown, handler: ProxyHandler<Any>)
 {	const {opCodes, values} = bytecode;
 	const stack: Any[] = [];
 	let stackLen = 0;

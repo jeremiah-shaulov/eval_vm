@@ -5,9 +5,6 @@ import {safeEval} from "./execute.ts";
 // deno-lint-ignore no-explicit-any
 type Any = any;
 
-// deno-lint-ignore ban-types
-type Handler = ProxyHandler<object>;
-
 export class Bytecode
 {	opCodes: OpCode[] = [];
 	values: Any[] = [];
@@ -27,7 +24,7 @@ export class Bytecode
 		this.values.push(value);
 	}
 
-	safeEval(globalThis: unknown={}, handler: Handler={})
+	safeEval(globalThis: unknown={}, handler: ProxyHandler<Any>={})
 	{	safeEval(this, globalThis, handler);
 	}
 

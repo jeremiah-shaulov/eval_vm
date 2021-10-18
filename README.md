@@ -13,23 +13,27 @@ During code execution, `globalThis` object is substituted with one that you prov
 import {safeEval} from "https://deno.land/x/eval_vm@v0.0.4/mod.ts";
 
 // 1. Prepare fake "globalThis" object
-const globalThis: any = {Object, String, Number, Math, JSON};
+const globalThis: any = {Object, Array, String, Number, Math, JSON};
 globalThis.globalThis = globalThis;
 globalThis.self = globalThis;
 
 // 2. Handler that intercepts property access
-const handler: ProxyHandler<object> =
-{	get(target: any, prop: string, globalThis: any)
-	{	if (typeof(target)=='function' || prop=='prototype' || prop=='__proto__')
-		{	return {};
+const handler: ProxyHandler<any> =
+{	get(target, prop)
+	{	if (typeof(target)!='function' && prop!='prototype' && prop!='__proto__')
+		{	return target[prop];
 		}
-		return target[prop];
 	},
 
-	set(target: any, prop: string, value: any)
+	set(target, prop, value)
 	{	if (target == globalThis)
 		{	target[prop] = value;
 		}
+		return true;
+	},
+
+	deleteProperty()
+	{	// won't delete
 		return true;
 	}
 };
