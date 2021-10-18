@@ -5,6 +5,9 @@ import {safeEval} from "./execute.ts";
 // deno-lint-ignore no-explicit-any
 type Any = any;
 
+// deno-lint-ignore ban-types
+type Handler = ProxyHandler<object>;
+
 export class Bytecode
 {	opCodes: OpCode[] = [];
 	values: Any[] = [];
@@ -14,7 +17,7 @@ export class Bytecode
 		{	const it = jstok(expr);
 			const {exitType} = compile(this, it);
 			if (exitType != ExitType.EOF)
-			{	throw new SyntaxError('Unbalanced parentheses');
+			{	throw new SyntaxError('Invalid expression');
 			}
 		}
 	}
@@ -24,8 +27,8 @@ export class Bytecode
 		this.values.push(value);
 	}
 
-	safeEval(globalThis: unknown={})
-	{	safeEval(this, globalThis);
+	safeEval(globalThis: unknown={}, handler: Handler={})
+	{	safeEval(this, globalThis, handler);
 	}
 
 	toString()
@@ -52,6 +55,9 @@ export class Bytecode
 					break;
 				case OpCode.CALL:
 					str += `CALL ${values[i]}\n`;
+					break;
+				case OpCode.NEW:
+					str += `NEW ${values[i]}\n`;
 					break;
 				case OpCode.DISCARD:
 					str += `DISCARD\n`;

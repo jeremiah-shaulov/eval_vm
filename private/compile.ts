@@ -33,6 +33,7 @@ export const enum OpCode
 	QEST_DOT,
 	GET,
 	CALL,
+	NEW,
 	DISCARD,
 	ARRAY,
 	OBJECT,
@@ -99,6 +100,7 @@ const PRECEDENCE =
 	20, // QEST_DOT
 	20, // GET
 	19, // CALL
+	18, // NEW,
 	0, // DISCARD
 	20, // ARRAY
 	20, // OBJECT
@@ -207,6 +209,18 @@ export function compile(bytecode: Bytecode, it: Generator<Token>, exprType=ExprT
 	let lastWhitespaceToken: Token | undefined;
 	let token: Token | undefined;
 
+	/*	When `expecting` == Expecting.VALUE:
+			- If unary prefix operation arrives, it will be pushed to `pendingUnaryOps`.
+			- If operand (number, string, etc.) arrives, it will be added to `bytecode`, and `expecting` will be switched to Expecting.OPERATION.
+
+		When `expecting` == Expecting.OPERATION:
+			- If operation (add, subtract, etc.) arrives, it will be set to `pendingOp`, and `expecting` will be switched to Expecting.VALUE.
+
+		When `expecting` == Expecting.VALUE:
+			- If after adding operand, there was nonempty `pendingOp` (`pendingOp != OpCode.VALUE`), this pending operation will be added to `bytecode`, and `pendingOp` will be reset.
+			After adding `pendingOp`, operations at previous insert position (when last time added `pendingOp`) will be considered, and all operations with lower precedence will be moved to the end of `bytecode` array.
+	 */
+
 	while (true)
 	{	if (redoToken)
 		{	token = redoToken;
@@ -286,6 +300,9 @@ export function compile(bytecode: Bytecode, it: Generator<Token>, exprType=ExprT
 							continue;
 						case 'delete':
 							pendingUnaryOps[pendingUnaryOps.length] = OpCode.DELETE;
+							continue;
+						case 'new':
+							pendingUnaryOps[pendingUnaryOps.length] = OpCode.NEW;
 							continue;
 						case 'if':
 							if (isStmtStart)
@@ -905,13 +922,22 @@ export function compile(bytecode: Bytecode, it: Generator<Token>, exprType=ExprT
 					{	j--;
 					}
 				}
-				bytecode.add(pendingOp, opCodeValue);
-				const newLen = opCodes.length;
-				if (j < lastOpI)
-				{	const shiftBlockLen = lastOpI - j++;
+				const prevLastOpI = lastOpI;
+				lastOpI = opCodes.length;
+				if (j < prevLastOpI)
+				{	const shiftBlockLen = prevLastOpI - j++;
+					let pos = lastOpI;
+					if (pendingOp==OpCode.CALL && opCodes[j]==OpCode.NEW)
+					{	// CALL followed by NEW - merge to single NEW
+						values[j] = opCodeValue;
+					}
+					else
+					{	bytecode.add(pendingOp, opCodeValue);
+						pos++;
+					}
 					let k = j + shiftBlockLen;
 					const kEnd = k + shiftBlockLen;
-					for (; k<newLen; j++, k++)
+					for (; k<pos; j++, k++)
 					{	// swap opCodes
 						const tmp = opCodes[j];
 						opCodes[j] = opCodes[k];
@@ -921,8 +947,8 @@ export function compile(bytecode: Bytecode, it: Generator<Token>, exprType=ExprT
 						values[j] = values[k];
 						values[k] = tmp2;
 					}
-					if (kEnd > newLen)
-					{	while (++j < newLen)
+					if (kEnd > pos)
+					{	while (++j < pos)
 						{	// swap opCodes
 							const tmp = opCodes[j-1];
 							opCodes[j-1] = opCodes[j];
@@ -934,7 +960,9 @@ export function compile(bytecode: Bytecode, it: Generator<Token>, exprType=ExprT
 						}
 					}
 				}
-				lastOpI = newLen - 1;
+				else
+				{	bytecode.add(pendingOp, opCodeValue);
+				}
 			}
 			else if (lastOpI==-1 && pendingUnaryOps.length!=0)
 			{	lastOpI = opCodes.length - 1;

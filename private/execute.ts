@@ -169,6 +169,29 @@ async function executeBytecode(bytecode: Bytecode, globalThis: unknown, handler:
 					stack[stackLen-1] = result;
 					break;
 				}
+				case OpCode.NEW:
+				{	const nArgs = values[i]|0;
+					const args: unknown[] = [];
+					for (let i=stackLen-nArgs; i<stackLen; i++)
+					{	const value = valueOf(stack[i]);
+						if (value instanceof Spread)
+						{	for (const v of value.value)
+							{	args[args.length] = v;
+							}
+						}
+						else
+						{	args[args.length] = value;
+						}
+					}
+					stackLen -= nArgs;
+					const className = stack[stackLen-1];
+					if (!(className instanceof Name))
+					{	throw new Error('Cannot instanciate such value');
+					}
+					const c: Any = className.get(globalThis, handler);
+					stack[stackLen-1] = new c(...args);
+					break;
+				}
 				case OpCode.DISCARD:
 				{	valueOf(stack[--stackLen]); // evaluate for side effects
 					break;

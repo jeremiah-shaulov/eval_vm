@@ -135,17 +135,28 @@ Deno.test
 			`a={k2: "v2"}; b={k1: "v1", ...a, k3: "v3"}`,
 			`a={k2: "v2", k3: "v3"}; ["k1", ...Object.keys(a), "k4"]`,
 			`a=[2.1, 3.4, -5]; Math.max(...a)`,
+			`a=new C`,
+			`a=new C; a`,
+			`a=new C(1.2)`,
+			`a=new C(1.2).prop`,
+			`a=new C(1.2).prop + '!'`,
 		];
 
 		// deno-lint-ignore no-unused-vars
 		var a, b, c, v; // for eval()
+		class C
+		{	prop = 'The prop';
+			constructor(public arg1: Any, public arg2: Any, public arg3: Any='The arg 3')
+			{
+			}
+		}
 		// deno-lint-ignore no-unused-vars
 		function setV(newV: Any)
 		{	v = newV;
 		}
 
 		for (const expr of EXPRS)
-		{	const ENV: Any = {Object, String, Number, Math, JSON, setV(newV: Any) {this.v = newV}};
+		{	const ENV: Any = {Object, String, Number, Math, JSON, C, setV(newV: Any) {this.v = newV}};
 			ENV.self = ENV;
 			ENV.globalThis = ENV;
 			a = b = c = v = undefined;
