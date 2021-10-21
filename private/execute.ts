@@ -85,7 +85,7 @@ async function executeBytecode(bytecode: Bytecode, globalThis: unknown, handler:
 {	const {opCodes, values} = bytecode;
 	const stack: Any[] = [];
 	let stackLen = 0;
-	const scopes = [{i: 0, iEnd: opCodes.length}];
+	const scopes = [{i: 0, iEnd: bytecode.length}];
 	let scopesLen = 1;
 
 	function valueOf(value: Any)
@@ -97,14 +97,14 @@ async function executeBytecode(bytecode: Bytecode, globalThis: unknown, handler:
 
 	while (scopesLen-- > 0)
 	{	let {i, iEnd} = scopes[scopesLen];
-		for (; i<iEnd; i++)
+		for (; i<iEnd; i+=2)
 		{	const opCode = opCodes[i];
 			switch (opCode)
 			{	case OpCode.VALUE:
-					stack[stackLen++] = values[i];
+					stack[stackLen++] = values[opCodes[i+1]];
 					break;
 				case OpCode.NAME:
-					stack[stackLen++] = new Name(values[i]+'', globalThis);
+					stack[stackLen++] = new Name(values[opCodes[i+1]]+'', globalThis);
 					break;
 				case OpCode.DOT:
 				{	const name = stack[--stackLen];
@@ -143,7 +143,7 @@ async function executeBytecode(bytecode: Bytecode, globalThis: unknown, handler:
 					break;
 				}
 				case OpCode.CALL:
-				{	const nArgs = values[i]|0;
+				{	const nArgs = opCodes[i+1]|0;
 					const args: unknown[] = [];
 					for (let i=stackLen-nArgs; i<stackLen; i++)
 					{	const value = valueOf(stack[i]);
@@ -180,7 +180,7 @@ async function executeBytecode(bytecode: Bytecode, globalThis: unknown, handler:
 					break;
 				}
 				case OpCode.NEW:
-				{	const nArgs = values[i]|0;
+				{	const nArgs = opCodes[i+1]|0;
 					const args: unknown[] = [];
 					for (let i=stackLen-nArgs; i<stackLen; i++)
 					{	const value = valueOf(stack[i]);
@@ -206,7 +206,7 @@ async function executeBytecode(bytecode: Bytecode, globalThis: unknown, handler:
 					break;
 				}
 				case OpCode.ARRAY:
-				{	const nArgs = values[i]|0;
+				{	const nArgs = opCodes[i+1]|0;
 					const args: unknown[] = [];
 					for (let i=stackLen-nArgs; i<stackLen; i++)
 					{	const value = valueOf(stack[i]);
@@ -224,7 +224,7 @@ async function executeBytecode(bytecode: Bytecode, globalThis: unknown, handler:
 					break;
 				}
 				case OpCode.OBJECT:
-				{	const nArgs = values[i]|0;
+				{	const nArgs = opCodes[i+1]|0;
 					const obj: Record<string, unknown> = {};
 					for (let i=stackLen-nArgs; i<stackLen;)
 					{	const name = valueOf(stack[i++]);
@@ -243,7 +243,7 @@ async function executeBytecode(bytecode: Bytecode, globalThis: unknown, handler:
 					break;
 				}
 				case OpCode.STRING_TEMPLATE:
-				{	const nArgs = values[i]|0;
+				{	const nArgs = opCodes[i+1]|0;
 					const strings: Any = [];
 					const raw: string[] = [];
 					const args: unknown[] = [strings];
@@ -278,14 +278,14 @@ async function executeBytecode(bytecode: Bytecode, globalThis: unknown, handler:
 				}
 				case OpCode.IF:
 				case OpCode.IF_NOT_NULL:
-				{	const thenBlockSize = values[i]|0;
-					const thenStart = i + 1;
+				{	const thenBlockSize = opCodes[i+1]|0;
+					const thenStart = i + 2;
 					const thenEnd = thenStart + thenBlockSize;
-					const elseBlockSize = values[thenEnd]|0; // OpCode.ELSE
-					const elseStart = thenEnd + 1;
+					const elseBlockSize = opCodes[thenEnd+1]|0; // OpCode.ELSE
+					const elseStart = thenEnd + 2;
 					const elseEnd = elseStart + elseBlockSize;
 					const cond = valueOf(stack[stackLen-1]);
-					scopes[scopesLen++] = {i: elseEnd+1, iEnd}; // i after ENDIF
+					scopes[scopesLen++] = {i: elseEnd+2, iEnd}; // i after ENDIF
 					if (opCode==OpCode.IF ? cond : cond!=null)
 					{	i = thenStart;
 						iEnd = thenEnd;
@@ -294,7 +294,7 @@ async function executeBytecode(bytecode: Bytecode, globalThis: unknown, handler:
 					{	i = elseStart;
 						iEnd = elseEnd;
 					}
-					i--; // will i++ on next iter
+					i -= 2; // will i += 2 on next iter
 					break;
 				}
 				case OpCode.UNARY_PLUS:

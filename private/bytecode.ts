@@ -6,8 +6,9 @@ import {safeEval} from "./execute.ts";
 type Any = any;
 
 export class Bytecode
-{	opCodes: OpCode[] = [];
-	values: Any[] = [];
+{	length = 0;
+	opCodes = new Int32Array(128);
+	values: Any[] = [''];
 
 	constructor(expr='')
 	{	if (expr)
@@ -19,9 +20,47 @@ export class Bytecode
 		}
 	}
 
-	add(opCode: OpCode, value: Any)
-	{	this.opCodes.push(opCode);
-		this.values.push(value);
+	addValue(value: Any)
+	{	let {opCodes, values} = this;
+		if (this.length+2 >= opCodes.length)
+		{	const tmp = new Int32Array(opCodes.length * 2);
+			tmp.set(opCodes);
+			opCodes = tmp;
+			this.opCodes = opCodes;
+		}
+		opCodes[this.length++] = OpCode.VALUE;
+		if (value === '')
+		{	opCodes[this.length++] = 0;
+		}
+		else
+		{	opCodes[this.length++] = values.length;
+			values[values.length] = value;
+		}
+	}
+
+	addName(name: string)
+	{	let {opCodes, values} = this;
+		if (this.length+2 >= opCodes.length)
+		{	const tmp = new Int32Array(opCodes.length * 2);
+			tmp.set(opCodes);
+			opCodes = tmp;
+			this.opCodes = opCodes;
+		}
+		opCodes[this.length++] = OpCode.NAME;
+		opCodes[this.length++] = values.length;
+		values[values.length] = name;
+	}
+
+	add(opCode: OpCode, value: number)
+	{	let {opCodes} = this;
+		if (this.length+2 >= opCodes.length)
+		{	const tmp = new Int32Array(opCodes.length * 2);
+			tmp.set(opCodes);
+			opCodes = tmp;
+			this.opCodes = opCodes;
+		}
+		opCodes[this.length++] = opCode;
+		opCodes[this.length++] = value;
 	}
 
 	safeEval(globalThis: unknown={}, handler: ProxyHandler<Any>={})
@@ -29,17 +68,17 @@ export class Bytecode
 	}
 
 	toString()
-	{	const {opCodes, values} = this;
+	{	const {length, opCodes, values} = this;
 		let indent = '';
 		let str = '';
-		for (let i=0, iEnd=opCodes.length; i<iEnd; i++)
+		for (let i=0; i<length; i+=2)
 		{	str += indent;
 			switch (opCodes[i])
 			{	case OpCode.VALUE:
-					str += `VALUE ${JSON.stringify(values[i])}\n`;
+					str += `VALUE ${JSON.stringify(values[opCodes[i+1]])}\n`;
 					break;
 				case OpCode.NAME:
-					str += `NAME ${values[i]}\n`;
+					str += `NAME ${values[opCodes[i+1]]}\n`;
 					break;
 				case OpCode.DOT:
 					str += `DOT\n`;
@@ -51,34 +90,34 @@ export class Bytecode
 					str += `GET\n`;
 					break;
 				case OpCode.CALL:
-					str += `CALL ${values[i]}\n`;
+					str += `CALL ${opCodes[i+1]}\n`;
 					break;
 				case OpCode.NEW:
-					str += `NEW ${values[i]}\n`;
+					str += `NEW ${opCodes[i+1]}\n`;
 					break;
 				case OpCode.DISCARD:
 					str += `DISCARD\n`;
 					break;
 				case OpCode.ARRAY:
-					str += `ARRAY ${values[i]}\n`;
+					str += `ARRAY ${opCodes[i+1]}\n`;
 					break;
 				case OpCode.OBJECT:
-					str += `OBJECT ${values[i]}\n`;
+					str += `OBJECT ${opCodes[i+1]}\n`;
 					break;
 				case OpCode.STRING_TEMPLATE:
-					str += `STRING_TEMPLATE ${values[i]}\n`;
+					str += `STRING_TEMPLATE ${opCodes[i+1]}\n`;
 					break;
 				case OpCode.IF:
-					str += `IF ${values[i]}\n`;
+					str += `IF ${opCodes[i+1]}\n`;
 					indent += '\t';
 					break;
 				case OpCode.IF_NOT_NULL:
-					str += `IF_NOT_NULL ${values[i]}\n`;
+					str += `IF_NOT_NULL ${opCodes[i+1]}\n`;
 					indent += '\t';
 					break;
 				case OpCode.ELSE:
 					str = str.slice(0, -1);
-					str += `ELSE ${values[i]}\n`;
+					str += `ELSE ${opCodes[i+1]}\n`;
 					break;
 				case OpCode.ENDIF:
 					str = str.slice(0, -1);
