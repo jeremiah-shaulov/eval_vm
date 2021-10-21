@@ -936,8 +936,9 @@ export function compile(bytecode: Bytecode, it: Generator<Token>, exprType=ExprT
 				if (j < lastOpI)
 				{	const shiftBlockLen = lastOpI - j;
 					if (pendingOp==OpCode.CALL && opCodes[j-2]==OpCode.NEW)
-					{	opCodes.copyWithin(j-2, j, bytecode.length); // delete OpCode.NEW
-						opCodes[bytecode.length - 2] = OpCode.NEW;
+					{	// convert combination of CALL NEW to NEW
+						opCodes.copyWithin(j-2, j, bytecode.length); // delete OpCode.NEW
+						opCodes[bytecode.length - 2] = OpCode.NEW; // replace CALL with NEW
 						opCodes[bytecode.length - 1] = opCodeValue;
 						j -= 2;
 					}
