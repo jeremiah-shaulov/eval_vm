@@ -147,6 +147,7 @@ Deno.test
 			`a=new C(1.2)`,
 			`a=new C(1.2).prop`,
 			`a=new C(1.2).prop + '!'`,
+			`v = 1 + Math.max(1.123, 0.1)`,
 		];
 
 		// deno-lint-ignore no-unused-vars

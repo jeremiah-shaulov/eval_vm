@@ -1,6 +1,9 @@
 import {Bytecode} from "./bytecode.ts";
 import {Token, TokenType} from "./deps.ts";
 
+// deno-lint-ignore no-explicit-any
+type Any = any;
+
 const C_PAREN_OPEN = '('.charCodeAt(0);
 const C_PAREN_CLOSE = ')'.charCodeAt(0);
 const C_SQUARE_OPEN = '['.charCodeAt(0);
@@ -192,12 +195,12 @@ const enum Expecting
 }
 
 export class SyntaxError extends Error
-{	constructor(message: string, public nLine=-1, public nColumn=-1)
-	{	super(nLine<0 ? `Syntax error: ${message}` : `Syntax error at ${nLine}:${nColumn}: ${message}`);
+{	constructor(public origMessage: string, public nLine: number, public nColumn: number)
+	{	super(`Syntax error at ${nLine}:${nColumn}: ${origMessage}`);
 	}
 }
 
-export function compile(bytecode: Bytecode, it: Generator<Token>, exprType=ExprType.PRIMARY, redoToken: Token|undefined=undefined): {redoToken: Token|undefined, exitType: ExitType, nArgs: number}
+export function compile(bytecode: Bytecode, it: Generator<Token>, exprType=ExprType.PRIMARY, opCodesBuffer: number[]=[], valuesBuffer: Any[]=[]): {redoToken: Token|undefined, exitType: ExitType, nArgs: number}
 {	const {opCodes, values} = bytecode;
 	let expecting = Expecting.VALUE;
 	let pendingOp = OpCode.VALUE; // OpCode.VALUE for nothing
@@ -206,7 +209,9 @@ export function compile(bytecode: Bytecode, it: Generator<Token>, exprType=ExprT
 	let lastOpI = -1;
 	let nArgs = 1;
 	let isStmtStart = true;
+	let lastToken: Token | undefined;
 	let lastWhitespaceToken: Token | undefined;
+	var redoToken: Token | undefined;
 	let token: Token | undefined;
 
 	/*	When `expecting` == Expecting.VALUE:
@@ -245,8 +250,11 @@ export function compile(bytecode: Bytecode, it: Generator<Token>, exprType=ExprT
 					}
 					continue;
 				case TokenType.COMMENT:
+					lastWhitespaceToken = isAfterNewLine;
+					continue;
 				case TokenType.MORE_REQUEST:
 					lastWhitespaceToken = isAfterNewLine;
+					lastToken = token;
 					continue;
 				case TokenType.STRING:
 				case TokenType.STRING_TEMPLATE:
@@ -256,7 +264,7 @@ export function compile(bytecode: Bytecode, it: Generator<Token>, exprType=ExprT
 				{	bytecode.add(OpCode.VALUE, token.getValue());
 					let exitType;
 					while (true)
-					{	exitType = compile(bytecode, it, ExprType.STRING_TEMPLATE_CONCAT).exitType;
+					{	exitType = compile(bytecode, it, ExprType.STRING_TEMPLATE_CONCAT, opCodesBuffer, valuesBuffer).exitType;
 						if (exitType == ExitType.STRING_TEMPLATE_END)
 						{	break;
 						}
@@ -306,7 +314,7 @@ export function compile(bytecode: Bytecode, it: Generator<Token>, exprType=ExprT
 							continue;
 						case 'if':
 							if (isStmtStart)
-							{	redoToken = compileIf(bytecode, it);
+							{	redoToken = compileIf(bytecode, it, opCodesBuffer, valuesBuffer);
 								expecting = Expecting.NEW_STMT;
 								break;
 							}
@@ -334,7 +342,7 @@ export function compile(bytecode: Bytecode, it: Generator<Token>, exprType=ExprT
 									pendingUnaryOps[pendingUnaryOps.length] = OpCode.NOT;
 									continue;
 								case C_PAREN_OPEN:
-									if (compile(bytecode, it, ExprType.SECONDARY).exitType != ExitType.PAREN_CLOSE)
+									if (compile(bytecode, it, ExprType.SECONDARY, opCodesBuffer, valuesBuffer).exitType != ExitType.PAREN_CLOSE)
 									{	throw new SyntaxError('Unbalanced parentheses', token.nLine, token.nColumn);
 									}
 									break;
@@ -345,7 +353,7 @@ export function compile(bytecode: Bytecode, it: Generator<Token>, exprType=ExprT
 									}
 									return {redoToken: token, exitType: ExitType.PAREN_CLOSE, nArgs: 0};
 								case C_SQUARE_OPEN:
-								{	const {exitType, nArgs} = compile(bytecode, it, ExprType.ARRAY);
+								{	const {exitType, nArgs} = compile(bytecode, it, ExprType.ARRAY, opCodesBuffer, valuesBuffer);
 									if (exitType != ExitType.SQUARE_CLOSE)
 									{	throw new SyntaxError('Unbalanced square bracket', token.nLine, token.nColumn);
 									}
@@ -361,7 +369,7 @@ export function compile(bytecode: Bytecode, it: Generator<Token>, exprType=ExprT
 								case C_BRACE_OPEN:
 								{	if (isStmtStart && (exprType==ExprType.PRIMARY || exprType==ExprType.PRIMARY_ONE_STMT))
 									{	// deno-lint-ignore no-inner-declarations no-redeclare
-										var {redoToken, exitType} = compile(bytecode, it, ExprType.PRIMARY);
+										var {redoToken, exitType} = compile(bytecode, it, ExprType.PRIMARY, opCodesBuffer, valuesBuffer);
 										if (exitType != ExitType.BRACE_CLOSE)
 										{	throw new SyntaxError('Unbalanced braces', token.nLine, token.nColumn);
 										}
@@ -371,7 +379,7 @@ export function compile(bytecode: Bytecode, it: Generator<Token>, exprType=ExprT
 										redoToken = undefined;
 									}
 									else
-									{	const nArgs = compileObject(bytecode, it);
+									{	const nArgs = compileObject(bytecode, it, opCodesBuffer, valuesBuffer);
 										bytecode.add(OpCode.OBJECT, nArgs);
 									}
 									break;
@@ -433,8 +441,11 @@ export function compile(bytecode: Bytecode, it: Generator<Token>, exprType=ExprT
 					}
 					continue;
 				case TokenType.COMMENT:
+					lastWhitespaceToken = isAfterNewLine;
+					continue;
 				case TokenType.MORE_REQUEST:
 					lastWhitespaceToken = isAfterNewLine;
+					lastToken = token;
 					continue;
 				case TokenType.STRING_TEMPLATE:
 				{	bytecode.add(OpCode.VALUE, token.getValue());
@@ -450,7 +461,7 @@ export function compile(bytecode: Bytecode, it: Generator<Token>, exprType=ExprT
 					let nParts = 2;
 					let exitType;
 					while (true)
-					{	exitType = compile(bytecode, it, ExprType.STRING_TEMPLATE).exitType;
+					{	exitType = compile(bytecode, it, ExprType.STRING_TEMPLATE, opCodesBuffer, valuesBuffer).exitType;
 						nParts += 3;
 						if (exitType == ExitType.STRING_TEMPLATE_END)
 						{	break;
@@ -562,7 +573,7 @@ export function compile(bytecode: Bytecode, it: Generator<Token>, exprType=ExprT
 									bytecode.add(OpCode.IF, 0);
 									let len = opCodes.length;
 									bytecode.add(OpCode.DISCARD, 0);
-									if (compile(bytecode, it, ExprType.TO_COMMA).exitType != ExitType.COLON)
+									if (compile(bytecode, it, ExprType.TO_COMMA, opCodesBuffer, valuesBuffer).exitType != ExitType.COLON)
 									{	throw new SyntaxError('Ternary operator not terminated', token.nLine, token.nColumn);
 									}
 									values[len - 1] = opCodes.length - len;
@@ -571,7 +582,7 @@ export function compile(bytecode: Bytecode, it: Generator<Token>, exprType=ExprT
 									len = opCodes.length;
 									bytecode.add(OpCode.DISCARD, 0);
 									// deno-lint-ignore no-inner-declarations no-redeclare
-									var {redoToken, exitType} = compile(bytecode, it, ExprType.TO_COMMA);
+									var {redoToken, exitType} = compile(bytecode, it, ExprType.TO_COMMA, opCodesBuffer, valuesBuffer);
 									values[len - 1] = opCodes.length - len;
 									if (exitType!=ExitType.EOF && exitType!=ExitType.PAREN_CLOSE && exitType!=ExitType.SEMICOLON && exitType!=ExitType.NEW_EXPR && exitType!=ExitType.COMMA && exitType!=ExitType.COLON)
 									{	throw new SyntaxError('Invalid expression', token.nLine, token.nColumn);
@@ -628,7 +639,7 @@ export function compile(bytecode: Bytecode, it: Generator<Token>, exprType=ExprT
 									expecting = Expecting.VALUE;
 									continue;
 								case C_PAREN_OPEN:
-								{	const {nArgs, exitType} = compile(bytecode, it, ExprType.FUNC_ARGS);
+								{	const {nArgs, exitType} = compile(bytecode, it, ExprType.FUNC_ARGS, opCodesBuffer, valuesBuffer);
 									if (exitType != ExitType.PAREN_CLOSE)
 									{	throw new SyntaxError('Unbalanced parentheses', token.nLine, token.nColumn);
 									}
@@ -640,7 +651,7 @@ export function compile(bytecode: Bytecode, it: Generator<Token>, exprType=ExprT
 								case C_PAREN_CLOSE:
 									return {redoToken: token, exitType: ExitType.PAREN_CLOSE, nArgs};
 								case C_SQUARE_OPEN:
-								{	const {exitType} = compile(bytecode, it, ExprType.SECONDARY);
+								{	const {exitType} = compile(bytecode, it, ExprType.SECONDARY, opCodesBuffer, valuesBuffer);
 									if (exitType != ExitType.SQUARE_CLOSE)
 									{	throw new SyntaxError('Unbalanced square bracket', token.nLine, token.nColumn);
 									}
@@ -754,7 +765,7 @@ export function compile(bytecode: Bytecode, it: Generator<Token>, exprType=ExprT
 									const len = opCodes.length;
 									bytecode.add(OpCode.DISCARD, 0);
 									// deno-lint-ignore no-inner-declarations no-redeclare
-									var {redoToken, exitType} = compile(bytecode, it, ExprType.TO_COMMA_OR_PIPEPIPE);
+									var {redoToken, exitType} = compile(bytecode, it, ExprType.TO_COMMA_OR_PIPEPIPE, opCodesBuffer, valuesBuffer);
 									values[len - 1] = opCodes.length - len;
 									// ELSE
 									bytecode.add(OpCode.ELSE, 0);
@@ -779,7 +790,7 @@ export function compile(bytecode: Bytecode, it: Generator<Token>, exprType=ExprT
 									const len = opCodes.length;
 									bytecode.add(OpCode.DISCARD, 0);
 									// deno-lint-ignore no-inner-declarations no-redeclare
-									var {redoToken, exitType} = compile(bytecode, it, ExprType.TO_COMMA);
+									var {redoToken, exitType} = compile(bytecode, it, ExprType.TO_COMMA, opCodesBuffer, valuesBuffer);
 									values[len - 1] = opCodes.length - len;
 									// ENDIF
 									if (exitType!=ExitType.EOF && exitType!=ExitType.PAREN_CLOSE && exitType!=ExitType.SEMICOLON && exitType!=ExitType.NEW_EXPR && exitType!=ExitType.COMMA && exitType!=ExitType.COLON)
@@ -829,7 +840,7 @@ export function compile(bytecode: Bytecode, it: Generator<Token>, exprType=ExprT
 									bytecode.add(OpCode.IF, 0);
 									const len = opCodes.length;
 									// deno-lint-ignore no-inner-declarations no-redeclare
-									var {redoToken, exitType} = compile(bytecode, it, ExprType.TO_COMMA_OR_PIPEPIPE);
+									var {redoToken, exitType} = compile(bytecode, it, ExprType.TO_COMMA_OR_PIPEPIPE, opCodesBuffer, valuesBuffer);
 									bytecode.add(OpCode.ASSIGN, 0);
 									values[len - 1] = opCodes.length - len;
 									// ELSE
@@ -854,7 +865,7 @@ export function compile(bytecode: Bytecode, it: Generator<Token>, exprType=ExprT
 									bytecode.add(OpCode.ELSE, 0);
 									const len = opCodes.length;
 									// deno-lint-ignore no-inner-declarations no-redeclare
-									var {redoToken, exitType} = compile(bytecode, it, ExprType.TO_COMMA);
+									var {redoToken, exitType} = compile(bytecode, it, ExprType.TO_COMMA, opCodesBuffer, valuesBuffer);
 									bytecode.add(OpCode.ASSIGN, 0);
 									values[len - 1] = opCodes.length - len;
 									// ENDIF
@@ -935,80 +946,73 @@ export function compile(bytecode: Bytecode, it: Generator<Token>, exprType=ExprT
 					{	bytecode.add(pendingOp, opCodeValue);
 						pos++;
 					}
-					let k = j + shiftBlockLen;
-					if (k < pos)
-					{	const kEnd = k + shiftBlockLen;
-						/*	I want to perform:
+					/*	I want to perform:
 
-							const opCodesSlice = opCodes.splice(j, shiftBlockLen);
-							const valuesSlice = values.splice(j, shiftBlockLen);
-							opCodes.splice(opCodes.length, 0, ...opCodesSlice);
-							values.splice(values.length, 0, ...valuesSlice);
+						const opCodesSlice = opCodes.splice(j, shiftBlockLen);
+						const valuesSlice = values.splice(j, shiftBlockLen);
+						opCodes.splice(opCodes.length, 0, ...opCodesSlice);
+						values.splice(values.length, 0, ...valuesSlice);
 
-							The following is optimized version of this
-						 */
-						for (; k<pos; j++, k++)
-						{	// swap opCodes
-							const tmp = opCodes[j];
-							opCodes[j] = opCodes[k];
-							opCodes[k] = tmp;
-							// swap values
-							const tmp2 = values[j];
-							values[j] = values[k];
-							values[k] = tmp2;
-						}
-						if (kEnd > pos)
-						{	while (++j < pos)
-							{	// swap opCodes
-								const tmp = opCodes[j-1];
-								opCodes[j-1] = opCodes[j];
-								opCodes[j] = tmp;
-								// swap values
-								const tmp2 = values[j-1];
-								values[j-1] = values[j];
-								values[j] = tmp2;
-							}
-						}
+						The following is optimized version of this
+					 */
+					for (let k=0; k<shiftBlockLen; j++, k++)
+					{	opCodesBuffer[k] = opCodes[j];
+						valuesBuffer[k] = values[j];
+					}
+					for (let k=j-shiftBlockLen; j<pos; j++, k++)
+					{	opCodes[k] = opCodes[j];
+						values[k] = values[j];
+					}
+					j -= shiftBlockLen;
+					for (let k=0; k<shiftBlockLen; j++, k++)
+					{	opCodes[j] = opCodesBuffer[k];
+						values[j] = valuesBuffer[k];
 					}
 				}
 				else
 				{	bytecode.add(pendingOp, opCodeValue);
 				}
-			}
-			else if (lastOpI==-1 && pendingUnaryOps.length!=0)
-			{	lastOpI = opCodes.length - 1;
-			}
-			// done
-			if (expecting == Expecting.NEW_STMT)
-			{	bytecode.add(OpCode.DISCARD, 0);
-				expecting = Expecting.VALUE;
-			}
-			else
-			{	expecting = Expecting.OPERATION;
+				expecting = Expecting.OPERATION;
 				pendingOp = OpCode.VALUE;
 				opCodeValue = 0;
 			}
+			else
+			{	if (lastOpI==-1 && pendingUnaryOps.length!=0)
+				{	lastOpI = opCodes.length - 1;
+				}
+				if (expecting == Expecting.NEW_STMT)
+				{	bytecode.add(OpCode.DISCARD, 0);
+					expecting = Expecting.VALUE;
+				}
+				else
+				{	expecting = Expecting.OPERATION;
+				}
+			}
+			// done
 			pendingUnaryOps.length = 0;
 		}
 	}
 
 	if (pendingOp!=OpCode.VALUE || expecting==Expecting.VALUE)
-	{	throw new SyntaxError('Invalid expression');
+	{	throw new SyntaxError('Invalid expression', lastToken?.nLine ?? 1, lastToken?.nColumn ?? 1);
 	}
 	return {redoToken: undefined, exitType: ExitType.EOF, nArgs};
 }
 
-function compileObject(bytecode: Bytecode, it: Generator<Token>)
+function compileObject(bytecode: Bytecode, it: Generator<Token>, opCodesBuffer: number[]=[], valuesBuffer: Any[]=[])
 {	let state = false; // false: key expected; true: colon expected
 	let nArgs = 0;
-	let token;
+	let lastToken: Token | undefined;
+	let token: Token | undefined;
 
 	while ((token = it.next().value))
 	{	if (!state)
 		{	switch (token.type)
 			{	case TokenType.WHITESPACE:
 				case TokenType.COMMENT:
+					continue;
 				case TokenType.MORE_REQUEST:
+					lastToken = token;
 					continue;
 				case TokenType.STRING:
 					bytecode.add(OpCode.VALUE, token.getValue());
@@ -1023,7 +1027,7 @@ function compileObject(bytecode: Bytecode, it: Generator<Token>)
 					if (token.text.length == 1)
 					{	switch (token.text.charCodeAt(0))
 						{	case C_SQUARE_OPEN:
-							{	const {exitType} = compile(bytecode, it, ExprType.SECONDARY);
+							{	const {exitType} = compile(bytecode, it, ExprType.SECONDARY, opCodesBuffer, valuesBuffer);
 								if (exitType != ExitType.SQUARE_CLOSE)
 								{	throw new SyntaxError('Unbalanced square bracket', token.nLine, token.nColumn);
 								}
@@ -1036,7 +1040,7 @@ function compileObject(bytecode: Bytecode, it: Generator<Token>)
 						}
 					}
 					else if (token.text == '...')
-					{	const {exitType} = compile(bytecode, it, ExprType.OBJECT);
+					{	const {exitType} = compile(bytecode, it, ExprType.OBJECT, opCodesBuffer, valuesBuffer);
 						bytecode.add(OpCode.SPREAD, 0);
 						nArgs++;
 						if (exitType == ExitType.BRACE_CLOSE)
@@ -1060,7 +1064,9 @@ function compileObject(bytecode: Bytecode, it: Generator<Token>)
 		{	switch (token.type)
 			{	case TokenType.WHITESPACE:
 				case TokenType.COMMENT:
+					continue;
 				case TokenType.MORE_REQUEST:
+					lastToken = token;
 					continue;
 				case TokenType.OTHER:
 					if (token.text.length!=1 || token.text.charCodeAt(0)!=C_COLON)
@@ -1070,7 +1076,7 @@ function compileObject(bytecode: Bytecode, it: Generator<Token>)
 				default:
 					throw new SyntaxError('Expected ":"', token.nLine, token.nColumn);
 			}
-			const {exitType} = compile(bytecode, it, ExprType.OBJECT);
+			const {exitType} = compile(bytecode, it, ExprType.OBJECT, opCodesBuffer, valuesBuffer);
 			nArgs++;
 			if (exitType == ExitType.BRACE_CLOSE)
 			{	return nArgs;
@@ -1082,35 +1088,27 @@ function compileObject(bytecode: Bytecode, it: Generator<Token>)
 		state = !state;
 	}
 
-	throw new SyntaxError('Invalid expression'); // must exit on '}'
+	throw new SyntaxError('Invalid expression', lastToken?.nLine ?? 1, lastToken?.nColumn ?? 1); // must exit on '}'
 }
 
-function compileIf(bytecode: Bytecode, it: Generator<Token>, redoToken: Token|undefined=undefined): Token|undefined
+function compileIf(bytecode: Bytecode, it: Generator<Token>, opCodesBuffer: number[]=[], valuesBuffer: Any[]=[]): Token|undefined
 {	const {opCodes, values} = bytecode;
+	let lastToken: Token | undefined;
 	let token: Token | undefined;
 
-	while (true)
-	{	if (redoToken)
-		{	token = redoToken;
-			redoToken = undefined;
-		}
-		else
-		{	token = it.next().value;
-			if (!token)
-			{	break;
-			}
-		}
-
-		switch (token.type)
+	while ((token = it.next().value))
+	{	switch (token.type)
 		{	case TokenType.WHITESPACE:
 			case TokenType.COMMENT:
+				continue;
 			case TokenType.MORE_REQUEST:
+				lastToken = token;
 				continue;
 			case TokenType.OTHER:
 			{	if (token.text != '(')
 				{	throw new SyntaxError('Expected "(" after "if"', token.nLine, token.nColumn);
 				}
-				if (compile(bytecode, it, ExprType.SECONDARY).exitType != ExitType.PAREN_CLOSE)
+				if (compile(bytecode, it, ExprType.SECONDARY, opCodesBuffer, valuesBuffer).exitType != ExitType.PAREN_CLOSE)
 				{	throw new SyntaxError('Unbalanced parentheses', token.nLine, token.nColumn);
 				}
 				// IF
@@ -1118,7 +1116,7 @@ function compileIf(bytecode: Bytecode, it: Generator<Token>, redoToken: Token|un
 				let len = opCodes.length;
 				bytecode.add(OpCode.DISCARD, 0);
 				// deno-lint-ignore no-inner-declarations no-redeclare
-				var {redoToken, exitType} = compile(bytecode, it, ExprType.PRIMARY_ONE_STMT);
+				var {redoToken, exitType} = compile(bytecode, it, ExprType.PRIMARY_ONE_STMT, opCodesBuffer, valuesBuffer);
 				values[len - 1] = opCodes.length - len;
 				// ELSE
 				bytecode.add(OpCode.ELSE, 0);
@@ -1133,7 +1131,7 @@ function compileIf(bytecode: Bytecode, it: Generator<Token>, redoToken: Token|un
 					if (redoToken && redoToken.type==TokenType.IDENT && redoToken.text=='else')
 					{	bytecode.add(OpCode.DISCARD, 0);
 						// deno-lint-ignore no-inner-declarations no-redeclare
-						var {redoToken, exitType} = compile(bytecode, it, ExprType.PRIMARY_ONE_STMT);
+						var {redoToken, exitType} = compile(bytecode, it, ExprType.PRIMARY_ONE_STMT, opCodesBuffer, valuesBuffer);
 						values[len - 1] = opCodes.length - len;
 						if (exitType==ExitType.SEMICOLON || exitType==ExitType.BRACE_CLOSE)
 						{	redoToken = undefined;
@@ -1149,5 +1147,5 @@ function compileIf(bytecode: Bytecode, it: Generator<Token>, redoToken: Token|un
 		}
 	}
 
-	throw new SyntaxError('Invalid expression');
+	throw new SyntaxError('Invalid expression', lastToken?.nLine ?? 1, lastToken?.nColumn ?? 1);
 }
