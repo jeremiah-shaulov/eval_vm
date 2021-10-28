@@ -1,1 +1,1 @@
-export {jstok, jstokReader, Token, TokenType} from 'https://deno.land/x/jstok@v0.1.4/mod.ts';
+export {jstok, jstokReader, Token, TokenType} from 'https://deno.land/x/jstok@v1.0.1/mod.ts';
