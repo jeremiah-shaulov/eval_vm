@@ -10,7 +10,7 @@ During code execution, `globalThis` object is substituted with one that you prov
 ### Example:
 
 ```ts
-import {safeEval} from "https://deno.land/x/eval_vm@v0.0.5/mod.ts";
+import {safeEval} from "https://deno.land/x/eval_vm@v0.0.6/mod.ts";
 
 // 1. Prepare fake "globalThis" object
 const globalThis: any = {Object, Array, String, Number, Math, JSON};

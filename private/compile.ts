@@ -1,9 +1,6 @@
 import {Bytecode} from "./bytecode.ts";
 import {Token, TokenType} from "./deps.ts";
 
-// deno-lint-ignore no-explicit-any
-type Any = any;
-
 const C_PAREN_OPEN = '('.charCodeAt(0);
 const C_PAREN_CLOSE = ')'.charCodeAt(0);
 const C_SQUARE_OPEN = '['.charCodeAt(0);
@@ -210,6 +207,7 @@ export function compile(bytecode: Bytecode, it: Generator<Token>, exprType=ExprT
 	let isStmtStart = true;
 	let lastToken: Token | undefined;
 	let lastWhitespaceToken: Token | undefined;
+	// deno-lint-ignore no-var
 	var redoToken: Token | undefined;
 	let token: Token | undefined;
 
@@ -367,7 +365,7 @@ export function compile(bytecode: Bytecode, it: Generator<Token>, exprType=ExprT
 									return {redoToken: token, exitType: ExitType.SQUARE_CLOSE, nArgs: 0};
 								case C_BRACE_OPEN:
 								{	if (isStmtStart && (exprType==ExprType.PRIMARY || exprType==ExprType.PRIMARY_ONE_STMT))
-									{	// deno-lint-ignore no-inner-declarations no-redeclare
+									{	// deno-lint-ignore no-inner-declarations no-redeclare no-var
 										var {redoToken, exitType} = compile(bytecode, it, ExprType.PRIMARY);
 										if (exitType != ExitType.BRACE_CLOSE)
 										{	throw new SyntaxError('Unbalanced braces', token.nLine, token.nColumn);
@@ -419,10 +417,7 @@ export function compile(bytecode: Bytecode, it: Generator<Token>, exprType=ExprT
 								pendingUnaryOps[pendingUnaryOps.length] = OpCode.SPREAD;
 								continue;
 							}
-							else
-							{	throw new SyntaxError('Unexpected token', token.nLine, token.nColumn);
-							}
-							break;
+							// fallthrough
 						default:
 							throw new SyntaxError('Unexpected token', token.nLine, token.nColumn);
 					}
@@ -580,7 +575,7 @@ export function compile(bytecode: Bytecode, it: Generator<Token>, exprType=ExprT
 									bytecode.add(OpCode.ELSE, 0);
 									len = bytecode.length;
 									bytecode.add(OpCode.DISCARD, 0);
-									// deno-lint-ignore no-inner-declarations no-redeclare
+									// deno-lint-ignore no-inner-declarations no-redeclare no-var
 									var {redoToken, exitType} = compile(bytecode, it, ExprType.TO_COMMA);
 									bytecode.opCodes[len - 1] = bytecode.length - len;
 									if (exitType!=ExitType.EOF && exitType!=ExitType.PAREN_CLOSE && exitType!=ExitType.SEMICOLON && exitType!=ExitType.NEW_EXPR && exitType!=ExitType.COMMA && exitType!=ExitType.COLON)
@@ -763,7 +758,7 @@ export function compile(bytecode: Bytecode, it: Generator<Token>, exprType=ExprT
 									bytecode.add(OpCode.IF, 0);
 									const len = bytecode.length;
 									bytecode.add(OpCode.DISCARD, 0);
-									// deno-lint-ignore no-inner-declarations no-redeclare
+									// deno-lint-ignore no-inner-declarations no-redeclare no-var
 									var {redoToken, exitType} = compile(bytecode, it, ExprType.TO_COMMA_OR_PIPEPIPE);
 									bytecode.opCodes[len - 1] = bytecode.length - len;
 									// ELSE
@@ -788,7 +783,7 @@ export function compile(bytecode: Bytecode, it: Generator<Token>, exprType=ExprT
 									bytecode.add(OpCode.ELSE, 0);
 									const len = bytecode.length;
 									bytecode.add(OpCode.DISCARD, 0);
-									// deno-lint-ignore no-inner-declarations no-redeclare
+									// deno-lint-ignore no-inner-declarations no-redeclare no-var
 									var {redoToken, exitType} = compile(bytecode, it, ExprType.TO_COMMA);
 									bytecode.opCodes[len - 1] = bytecode.length - len;
 									// ENDIF
@@ -838,7 +833,7 @@ export function compile(bytecode: Bytecode, it: Generator<Token>, exprType=ExprT
 								{	// IF
 									bytecode.add(OpCode.IF, 0);
 									const len = bytecode.length;
-									// deno-lint-ignore no-inner-declarations no-redeclare
+									// deno-lint-ignore no-inner-declarations no-redeclare no-var
 									var {redoToken, exitType} = compile(bytecode, it, ExprType.TO_COMMA_OR_PIPEPIPE);
 									bytecode.add(OpCode.ASSIGN, 0);
 									bytecode.opCodes[len - 1] = bytecode.length - len;
@@ -863,7 +858,7 @@ export function compile(bytecode: Bytecode, it: Generator<Token>, exprType=ExprT
 									// ELSE
 									bytecode.add(OpCode.ELSE, 0);
 									const len = bytecode.length;
-									// deno-lint-ignore no-inner-declarations no-redeclare
+									// deno-lint-ignore no-inner-declarations no-redeclare no-var
 									var {redoToken, exitType} = compile(bytecode, it, ExprType.TO_COMMA);
 									bytecode.add(OpCode.ASSIGN, 0);
 									bytecode.opCodes[len - 1] = bytecode.length - len;
@@ -1101,7 +1096,7 @@ function compileIf(bytecode: Bytecode, it: Generator<Token>): Token|undefined
 				bytecode.add(OpCode.IF, 0);
 				let len = bytecode.length;
 				bytecode.add(OpCode.DISCARD, 0);
-				// deno-lint-ignore no-inner-declarations no-redeclare
+				// deno-lint-ignore no-inner-declarations no-var
 				var {redoToken, exitType} = compile(bytecode, it, ExprType.PRIMARY_ONE_STMT);
 				bytecode.opCodes[len - 1] = bytecode.length - len;
 				// ELSE
@@ -1116,7 +1111,7 @@ function compileIf(bytecode: Bytecode, it: Generator<Token>): Token|undefined
 					}
 					if (redoToken && redoToken.type==TokenType.IDENT && redoToken.text=='else')
 					{	bytecode.add(OpCode.DISCARD, 0);
-						// deno-lint-ignore no-inner-declarations no-redeclare
+						// deno-lint-ignore no-inner-declarations no-redeclare no-var
 						var {redoToken, exitType} = compile(bytecode, it, ExprType.PRIMARY_ONE_STMT);
 						bytecode.opCodes[len - 1] = bytecode.length - len;
 						if (exitType==ExitType.SEMICOLON || exitType==ExitType.BRACE_CLOSE)

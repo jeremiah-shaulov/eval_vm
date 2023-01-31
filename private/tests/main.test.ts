@@ -1,5 +1,5 @@
 import {safeEval} from "../../mod.ts";
-import {assert, assertEquals} from 'https://deno.land/std@0.106.0/testing/asserts.ts';
+import {assert, assertEquals} from 'https://deno.land/std@0.175.0/testing/asserts.ts';
 
 // deno-lint-ignore no-explicit-any
 type Any = any;
@@ -151,7 +151,7 @@ Deno.test
 			`1 && 0 ? "y" : "n"`,
 		];
 
-		// deno-lint-ignore no-unused-vars
+		// deno-lint-ignore no-unused-vars no-var
 		var a, b, c, v; // for eval()
 		class C
 		{	prop = 'The prop';
